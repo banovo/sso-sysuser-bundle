@@ -1,0 +1,17 @@
+{
+  "name": "banovo/sso-sysuser-bundle",
+  "description": "SSO Sysuser Bundle",
+  "type": "symfony-bundle",
+  "authors": [
+    {
+      "name": "Sebastian Schirrmeister",
+      "email": "sebastian.schirrmeister@banovo.de"
+    }
+  ],
+  "minimum-stability": "dev",
+  "require": {
+  },
+  "autoload": {
+    "psr-4": { "Banovo\\SSOBundle\\": "src/" }
+  }
+}
