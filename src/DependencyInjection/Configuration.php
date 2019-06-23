@@ -19,6 +19,10 @@ class Configuration implements ConfigurationInterface
         $rootNode
             ->children()
                 ->arrayNode('sso_configuration')
+                    ->prototype('scalar')
+                ->end()
+            ->end()
+                ->arrayNode('sysusers_configuration')
                     ->prototype('array')
                         ->prototype('scalar')->end()
                     ->end()

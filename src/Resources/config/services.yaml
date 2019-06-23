@@ -6,4 +6,4 @@ services:
   Banovo\SSOSysuserBundle\Sysuser:
     class: Banovo\SSOSysuserBundle\Sysuser
     arguments:
-      - "@=parameter('banovo_sso_sysuser')['sso_configuration']"
+      - "@=parameter('banovo_sso_sysuser')"
