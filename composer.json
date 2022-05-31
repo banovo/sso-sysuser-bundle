@@ -1,23 +1,23 @@
 {
-  "name": "banovo/sso-sysuser-bundle",
-  "description": "SSO Sysuser Bundle",
-  "type": "symfony-bundle",
-  "authors": [
-    {
-      "name": "Sebastian Schirrmeister",
-      "email": "sebastian.schirrmeister@banovo.de"
-    }
-  ],
-  "minimum-stability": "dev",
-  "require": {
-    "guzzlehttp/guzzle": "^7.0"
-  },
-  "autoload": {
-    "psr-4": { "Banovo\\SSOSysuserBundle\\": "src/" }
-  },
-  "config": {
-    "platform": {
-      "php": "8.0"
-    }
-  }
+	"name": "banovo/sso-sysuser-bundle",
+	"description": "Banovo SSO Sysuser Bundle",
+	"type": "symfony-bundle",
+	"authors": [
+		{
+			"name": "Patrick Kaiser",
+			"email": "patrick.kaiser@banovo.de"
+		}
+	],
+	"homepage": "https://github.com/banovo/sso-sysuser-bundle",
+	"license": "MIT",
+	"minimum-stability": "dev",
+	"require": {
+		"php": ">=8.0.0",
+		"guzzlehttp/guzzle": "^7.0"
+	},
+	"autoload": {
+		"psr-4": {
+			"Banovo\\SSOSysuserBundle\\": "src/"
+		}
+	}
 }
