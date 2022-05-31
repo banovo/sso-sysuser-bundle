@@ -5,122 +5,166 @@ namespace Banovo\SSOSysuserBundle;
 use Symfony\Component\DependencyInjection\ParameterBag\ParameterBagInterface;
 use GuzzleHttp\Client;
 
+/**
+ * Helper class to get an access token for configured machine user
+ * from openid-connect endpoint
+ */
 class Sysuser
 {
+	/**
+	 * @var array
+	 */
+	private $config = [];
+	/**
+	 * @var bool
+	 */
+	private $accessToken = false;
+	/**
+	 * @var bool
+	 */
+	private $refreshToken = false;
+	/**
+	 * @var int
+	 */
+	private $expTimestamp = 0;
 
-    private $config = [];
-    private $access_token = false;
-    private $refresh_token = false;
-    private $exp_timestamp = 0;
+	/**
+	 * @param $banovoSsoSysuserConfig
+	 */
+	public function __construct($banovoSsoSysuserConfig)
+	{
+		$this->config = $banovoSsoSysuserConfig;
+	}
 
-    public function __construct($banovo_sso_sysuser_config) {
-        $this->config = $banovo_sso_sysuser_config;
-    }
+	/**
+	 * @param $credentialScope
+	 *
+	 * @return string
+	 * @throws \Exception
+	 */
+	public function getToken($credentialScope)
+	{
+		if ($this->accessToken && $this->isExpired()) {
+			$this->invalidateSession();
+		}
 
-    public function getToken($credential_scope) {
+		if (!$this->accessToken) {
+			$this->fetchToken($this->getCredentials($credentialScope));
+		}
 
-        if ($this->access_token && $this->isExpired()){
-            $this->invalidateSession();
-        }
+		$this->isExpired();
 
-        if(!$this->access_token){
-            $this->fetchToken($this->getCredentials($credential_scope));
-        }
+		return "Bearer $this->accessToken";
+	}
 
-        $this->isExpired();
+	/**
+	 * @return bool
+	 */
+	private function isExpired()
+	{
+		if (time() >= $this->expTimestamp - $this->config['sso_configuration']['token_expires_deduct_seconds']) {
+			return true;
+		}
 
-        return "Bearer $this->access_token";
-    }
+		return false;
+	}
 
-    private function isExpired()
-    {
+	/**
+	 * @param $credentialsScope
+	 *
+	 * @return array
+	 * @throws \Exception
+	 */
+	private function getCredentials($credentialsScope)
+	{
+		if (!array_key_exists($credentialsScope, $this->config['sysusers_configuration'])) {
+			throw new \Exception("Credentials Scope not configured in sysusers_configuration");
+		}
 
-        if(time() >= $this->exp_timestamp - $this->config['sso_configuration']['token_expires_deduct_seconds']) {
-            return true;
-        }
+		$credentials = [];
+		$credentials["username"] = key($this->config['sysusers_configuration'][$credentialsScope]);
+		$credentials["password"] = current($this->config['sysusers_configuration'][$credentialsScope]);
 
-        return false;
-    }
+		return $credentials;
+	}
 
-    private function getCredentials($credentials_scope) {
+	/**
+	 * @param $credentials
+	 *
+	 * @return void
+	 * @throws \Exception
+	 */
+	private function fetchToken($credentials)
+	{
+		$client = new Client();
+		$response = $client->request(
+			'POST', $this->config['sso_configuration']['token_endpoint'],
+			[
+				'form_params' => [
+					"grant_type"    => "password",
+					"client_id"     => $this->config['sso_configuration']['client_id'],
+					"client_secret" => $this->config['sso_configuration']['client_secret'],
+					"username"      => $credentials['username'],
+					"password"      => $credentials['password'],
+				]
+			]
+		);
 
-        if(!array_key_exists($credentials_scope, $this->config['sysusers_configuration'])){
-            throw new Exception("Credentials Scope not configured in sysusers_configuration");
-        }
+		$code = $response->getStatusCode();
+		if (200 != $code) {
+			throw new \Exception($response->getReasonPhrase(), $code);
+		}
 
-        $credentials = [];
-        $credentials["username"] = key($this->config['sysusers_configuration'][$credentials_scope]);
-        $credentials["password"] = current($this->config['sysusers_configuration'][$credentials_scope]);
+		$body = json_decode($response->getBody());
 
-        return $credentials;
-    }
+		// highly opinionated:
+		// issued token MUST contain APP_SYSTEM group
+		if (!in_array('APP_SYSTEM', json_decode(base64_decode(explode('.', $body->access_token)[1]))->groups)) {
+			throw new \Exception("Configured sysuser is no member of APP_SYSTEM");
+		};
 
-    private function fetchToken($credentials) {
+		$this->expTimestamp = json_decode(base64_decode(explode('.', $body->access_token)[1]))->exp;
+		$this->accessToken = $body->access_token;
+		$this->refreshToken = $body->refresh_token;
+	}
 
-        $client = new Client();
+	/**
+	 * @return void
+	 * @throws \Exception
+	 */
+	private function invalidateSession()
+	{
+		if (!$this->refreshToken) {
+			return;
+		}
 
-        $response = $client->request('POST', $this->config['sso_configuration']['token_endpoint'],
-            [
-                'form_params' => [
-                    "grant_type" =>  "password",
-                    "client_id"     =>  $this->config['sso_configuration']['client_id'],
-                    "client_secret"  =>  $this->config['sso_configuration']['client_secret'],
-                    "username"   =>  $credentials['username'],
-                    "password"   =>  $credentials['password'],
-                ]
-            ]
-        );
+		$client = new Client();
+		$response = $client->request(
+			'POST', $this->config['sso_configuration']['logout_endpoint'],
+			[
+				'form_params' => [
+					"client_id"     => $this->config['sso_configuration']['client_id'],
+					"client_secret" => $this->config['sso_configuration']['client_secret'],
+					"refresh_token" => $this->refreshToken,
+				]
+			]
+		);
 
-        $code = $response->getStatusCode();
-        $reason = $response->getReasonPhrase();
+		$code = $response->getStatusCode();
+		if (204 != $code) {
+			throw new \Exception($response->getReasonPhrase(), $code);
+		}
 
-        if (200 != $code){
-            throw new \Exception($reason, $code);
-        }
+		$this->accessToken = false;
+		$this->refreshToken = false;
+	}
 
-        $body = json_decode($response->getBody());
-
-        # Don't touch this!
-        if(!in_array('APP_SYSTEM', json_decode(base64_decode(explode('.', $body->access_token)[1]))->groups)){
-            throw new \Exception("Configured sysuser is no member of APP_SYSTEM");
-        };
-
-        $this->exp_timestamp = json_decode(base64_decode(explode('.', $body->access_token)[1]))->exp;
-        $this->access_token = $body->access_token;
-        $this->refresh_token = $body->refresh_token;
-
-    }
-
-    private function invalidateSession()
-    {
-
-        if (!$this->refresh_token){
-            return;
-        }
-
-        $client = new Client();
-        $response = $client->request('POST', $this->config['sso_configuration']['logout_endpoint'],
-            [
-                'form_params' => [
-                    "client_id"     =>  $this->config['sso_configuration']['client_id'],
-                    "client_secret" =>  $this->config['sso_configuration']['client_secret'],
-                    "refresh_token" =>  $this->refresh_token,
-                ]
-            ]
-        );
-
-        if(204 != $response->getStatusCode()){
-            throw new \Exception($reason, $code);
-        }
-
-        $this->access_token = false;
-        $this->refresh_token = false;
-
-    }
-
-    public function __destruct()
-    {
-        $this->invalidateSession();
-    }
-
+	/**
+	 * @return void
+	 * @throws \Exception
+	 */
+	public function __destruct()
+	{
+		$this->invalidateSession();
+	}
 }
